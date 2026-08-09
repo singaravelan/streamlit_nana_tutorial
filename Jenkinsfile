@@ -1,5 +1,15 @@
 pipeline {
-    agent any
+    /*
+     * Jenkins Docker Agent Configuration:
+     * Uses official python:3.11-slim container as the dedicated build/test agent.
+     * Mounts docker socket so agent can trigger docker build & docker compose deploy.
+     */
+    agent {
+        docker {
+            image 'python:3.11-slim'
+            args '-v /var/run/docker.sock:/var/run/docker.sock -v /tmp:/tmp'
+        }
+    }
 
     stages {
         stage('Checkout Code') {
@@ -11,16 +21,15 @@ pipeline {
 
         stage('Smoke & Regression Tests') {
             steps {
-                echo 'Running Python tests in an isolated ephemeral Python container...'
-                // Using docker run to execute tests inside official python:3.11-slim container
-                // This eliminates the need to install Python directly inside the Jenkins controller!
-                sh 'docker run --rm -v $(pwd):/app -w /app python:3.11-slim sh -c "pip install -r requirements.txt && python tests/test_app.py"'
+                echo 'Executing Python tests inside isolated Python Docker Agent...'
+                sh 'pip install --no-cache-dir -r requirements.txt'
+                sh 'python tests/test_app.py'
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                echo 'Building updated application Docker image...'
+                echo 'Building updated application Docker image via host Docker engine...'
                 sh 'docker compose -f docker-compose.dev.yml build'
             }
         }

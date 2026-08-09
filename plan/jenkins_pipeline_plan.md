@@ -1,67 +1,90 @@
-# Industry Best Practice: Jenkins CI/CD Pipeline with Docker Agent & SCM Polling
+# Industry Best Practice: Jenkins CI/CD Pipeline with Dedicated Python Docker Agent
 
-## Architectural Principles (MLOps Best Practices)
-
-1. **Clean Jenkins Controller**: 
-   - Never install application runtimes (like Python, PyTorch, Node.js) directly inside the Jenkins controller container.
-   - Jenkins acts strictly as an **orchestrator**.
-2. **Ephemeral Docker Agents / Containers**:
-   - Tests and code execution run inside temporary, isolated Docker containers (e.g., `python:3.11-slim`).
-3. **Automated Triggering**:
-   - Jenkins polls the GitHub repository (`git@github.com:singaravelan/streamlit_nana_tutorial.git`) every 2-5 minutes for new commits.
-4. **Zero-Downtime Local Update**:
-   - When a commit passes tests, Jenkins rebuilds the Docker image and executes `docker compose up -d --build` to update the running application automatically.
-
----
-
-## Architecture Flow
+## Architecture Overview
 
 ```
-[Developer] ➔ git push ➔ [GitHub Repo]
-                             │
-                             ▼ (Poll SCM every 2 mins)
-                     [Jenkins Controller]
-                             │
-                             ├─► 1. Run Python Unit/Smoke Tests (in python:3.11-slim container)
-                             ├─► 2. Build Docker Image (streamlit-app:latest)
-                             └─► 3. Deploy/Update via docker compose
+[Developer] ➔ git push ➔ [GitHub Remote Repo]
+                               │
+                               ▼ (Poll SCM every 2 mins)
+                       [Jenkins Controller]
+                               │
+            ┌──────────────────┴──────────────────┐
+            ▼                                     ▼
+[Jenkins Docker Agent: python:3.11-slim]   [Serving Container: streamlit-dev]
+ - Installs requirements.txt                - Runs application 24/7
+ - Runs Python tests/linters                - Untouched if tests fail
+ - Builds updated Docker image              - Replaced only when build succeeds
+ - Triggered via /var/run/docker.sock
 ```
 
 ---
 
-## Step 1: Create `Jenkinsfile` in Project Root
+## Why Use a Dedicated Jenkins Docker Agent?
 
-Add a declarative `Jenkinsfile` to your repository defining the stages:
-1. **Checkout & Test**: Spins up a clean `python:3.11-slim` container, installs `requirements.txt`, and runs smoke tests.
-2. **Build**: Builds the Streamlit app Docker image.
-3. **Deploy**: Re-runs `docker compose up -d --build` to update the live app.
-
----
-
-## Step 2: Configure Jenkins Job
-
-1. Open Jenkins (`http://localhost:8080`).
-2. Click **New Item** ➔ Name: `streamlit-mops-pipeline` ➔ Select **Pipeline**.
-3. Under **Build Triggers**:
-   - Check **Poll SCM**.
-   - Schedule: `H/2 * * * *` (polls GitHub every 2 minutes for changes).
-4. Under **Pipeline**:
-   - Definition: **Pipeline script from SCM**
-   - SCM: **Git**
-   - Repository URL: `git@github.com:singaravelan/streamlit_nana_tutorial.git` (or HTTPS URL `https://github.com/singaravelan/streamlit_nana_tutorial.git`)
-   - Branch Specifier: `*/main`
-   - Script Path: `Jenkinsfile`
-5. Save the job.
+1. **Clean Slate Execution**: Every build runs inside a brand new `python:3.11-slim` container isolated from your host system.
+2. **Serving App Protection**: Tests NEVER execute inside `streamlit-dev`. If a test fails, `streamlit-dev` remains online and completely unaffected.
+3. **No Controller Pollution**: No need to install Python, `pip`, or testing dependencies inside the Jenkins controller container.
 
 ---
 
-## Step 3: Verify Automated CI/CD Workflow
+## Updated `Jenkinsfile` Declarative Syntax
 
-1. Make a small code change in `src/app.py`.
-2. Commit and push to GitHub:
-   ```bash
-   git add .
-   git commit -m "Update app feature"
-   git push origin main
-   ```
-3. Within 2 minutes, Jenkins will detect the commit, trigger the build, execute tests in a Python container, and automatically update the running app!
+```groovy
+pipeline {
+    agent {
+        docker {
+            image 'python:3.11-slim'
+            args '-v /var/run/docker.sock:/var/run/docker.sock -v /tmp:/tmp'
+        }
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                echo 'Checking out code from Git...'
+                checkout scm
+            }
+        }
+
+        stage('Smoke & Regression Tests') {
+            steps {
+                echo 'Executing Python tests inside isolated Python Docker Agent...'
+                sh 'pip install --no-cache-dir -r requirements.txt'
+                sh 'python tests/test_app.py'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                echo 'Building updated application Docker image via host Docker engine...'
+                sh 'docker compose -f docker-compose.dev.yml build'
+            }
+        }
+
+        stage('Deploy / Hot Reload') {
+            steps {
+                echo 'Deploying updated containers locally...'
+                sh 'docker compose -f docker-compose.dev.yml up -d'
+            }
+        }
+    }
+
+    post {
+        success {
+            echo '🎉 CI/CD Pipeline succeeded! Application updated successfully.'
+        }
+        failure {
+            echo '❌ CI/CD Pipeline failed! Check logs above.'
+        }
+    }
+}
+```
+
+---
+
+## Required Jenkins Plugin
+
+For `agent { docker { ... } }` to work natively in Jenkins:
+1. Go to **Manage Jenkins** ➔ **Plugins** ➔ **Available Plugins**.
+2. Search and install **Docker Pipeline** (and **Docker** plugin).
+3. Restart Jenkins if prompted.
