@@ -1,8 +1,8 @@
 pipeline {
     /*
      * Production Enterprise Pattern (DevOps Journey):
-     * Uses a dynamic, ephemeral Docker Cloud Agent connected over TCP (JNLP).
-     * Label 'docker-python-agent' triggers Jenkins to dynamically launch an agent container.
+     * Runs on dynamic TCP Docker Cloud Agent (jenkins/inbound-agent:alpine).
+     * Uses ephemeral python:3.11-slim container for testing & host docker engine for build/deploy.
      */
     agent {
         label 'docker-python-agent'
@@ -18,9 +18,8 @@ pipeline {
 
         stage('Smoke & Regression Tests') {
             steps {
-                echo 'Executing Python tests inside dynamic Jenkins TCP Docker Agent...'
-                sh 'pip install --no-cache-dir -r requirements.txt'
-                sh 'python tests/test_app.py'
+                echo 'Executing Python tests inside isolated ephemeral python:3.11-slim container...'
+                sh 'docker run --rm -v $(pwd):/app -w /app python:3.11-slim sh -c "pip install --no-cache-dir -r requirements.txt && python tests/test_app.py"'
             }
         }
 
