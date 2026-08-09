@@ -2,7 +2,7 @@ pipeline {
     /*
      * Enterprise MLOps Pipeline with Harbor Registry & Dual Deployments:
      * - Runs on dynamic TCP Docker Cloud Agent (jenkins/inbound-agent:alpine)
-     * - Runs Python Smoke & Regression tests
+     * - Runs Python Smoke & Regression tests in /tmp/venv
      * - Builds & tags Docker image for Harbor
      * - Pushes image to Harbor Private Registry (localhost:8082)
      * - Deploys Development App (Port 8501) & Production App (Port 8502)
@@ -29,8 +29,9 @@ pipeline {
         stage('Smoke & Regression Tests') {
             steps {
                 echo 'Executing Python smoke and regression tests...'
-                sh 'python3 -m venv venv'
-                sh '. venv/bin/activate && pip install --no-cache-dir -r requirements.txt && python tests/test_app.py'
+                // Using /tmp/venv outside workspace folder to keep workspace clean for Git Poll SCM
+                sh 'python3 -m venv /tmp/venv'
+                sh '. /tmp/venv/bin/activate && pip install --no-cache-dir -r requirements.txt && python tests/test_app.py'
             }
         }
 

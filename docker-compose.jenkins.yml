@@ -1,24 +1,36 @@
 version: '3.8'
 
 services:
+  # Dedicated Docker Daemon Container (Docker-in-Docker / DinD)
+  # Eliminates /var/run/docker.sock macOS permission bugs permanently
+  dind:
+    image: docker:dind
+    container_name: jenkins-dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=
+    networks:
+      - mlops-network
+
+  # Jenkins Controller Container
   jenkins:
-    image: jenkins/jenkins:lts-alpine
-    container_name: jenkins-controller
+    image: jenkins/jenkins:lts-jdk21
+    container_name: jenkins
     user: root
     ports:
-      - "8080:8080" # Jenkins Web UI
+      - "8080:8080"   # Jenkins Web UI
       - "50000:50000" # JNLP Agent TCP Port for Inbound Agents
     volumes:
       - jenkins-data:/var/jenkins_home
-      - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - DOCKER_HOST=unix:///var/run/docker.sock
+      - DOCKER_HOST=tcp://dind:2375
     networks:
-      - streamlit_nana_tutorial_mlops-network
+      - mlops-network
 
 volumes:
   jenkins-data:
 
 networks:
-  streamlit_nana_tutorial_mlops-network:
+  mlops-network:
+    name: streamlit_nana_tutorial_mlops-network
     external: true
