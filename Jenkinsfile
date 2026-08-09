@@ -2,7 +2,6 @@ pipeline {
     /*
      * Enterprise TCP Docker Cloud Agent Architecture (DevOps Journey Pattern):
      * Runs on jenkins/inbound-agent:alpine connected over TCP (port 50000).
-     * Installs python3, pip, docker-cli, and docker-compose on-demand during pipeline.
      */
     agent {
         label 'docker-python-agent'
@@ -34,14 +33,14 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo 'Building updated application Docker image via host Docker engine...'
-                sh 'docker compose -f docker-compose.dev.yml build'
+                sh 'docker compose -p streamlit_nana_tutorial -f docker-compose.dev.yml build'
             }
         }
 
         stage('Deploy / Hot Reload') {
             steps {
                 echo 'Deploying updated containers locally...'
-                sh 'docker compose -f docker-compose.dev.yml up -d'
+                sh 'docker compose -p streamlit_nana_tutorial -f docker-compose.dev.yml up -d'
             }
         }
     }
