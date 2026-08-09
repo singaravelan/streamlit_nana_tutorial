@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  jenkins:
+    image: jenkins/jenkins:lts-alpine
+    container_name: jenkins-controller
+    user: root
+    ports:
+      - "8080:8080"   # Jenkins Web UI
+      - "50000:50000" # JNLP Agent TCP Port for Inbound Agents
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - DOCKER_HOST=unix:///var/run/docker.sock
+    networks:
+      - mlops-network
+
+volumes:
+  jenkins-data:
+
+networks:
+  mlops-network:
+    external: true

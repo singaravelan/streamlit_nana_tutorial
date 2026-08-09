@@ -1,90 +1,87 @@
-# Industry Best Practice: Jenkins CI/CD Pipeline with Dedicated Python Docker Agent
+# Production Enterprise Pattern: Jenkins TCP Docker Cloud Agents (DevOps Journey Architecture)
 
 ## Architecture Overview
 
 ```
-[Developer] ➔ git push ➔ [GitHub Remote Repo]
-                               │
-                               ▼ (Poll SCM every 2 mins)
-                       [Jenkins Controller]
-                               │
-            ┌──────────────────┴──────────────────┐
-            ▼                                     ▼
-[Jenkins Docker Agent: python:3.11-slim]   [Serving Container: streamlit-dev]
- - Installs requirements.txt                - Runs application 24/7
- - Runs Python tests/linters                - Untouched if tests fail
- - Builds updated Docker image              - Replaced only when build succeeds
- - Triggered via /var/run/docker.sock
+                                    [GitHub Remote Repo]
+                                             │
+                                             ▼ (Poll SCM every 2 mins)
+                                     [Jenkins Controller]
+                                    (Ports: 8080 UI, 50000 TCP)
+                                             │
+                    (Triggers via Docker API over unix/TCP socket)
+                                             │
+                                             ▼
+                 ┌──────────────────────────────────────────────────────┐
+                 │ Ephemeral Docker Cloud Agent (docker-python-agent)   │
+                 │  - Image: jenkins/inbound-agent:alpine (or python)   │
+                 │  - Connects back to Controller via TCP port 50000    │
+                 │  - Joined to 'mlops-network'                         │
+                 │  - Executes tests, builds app, then DELETES ITSELF   │
+                 └──────────────────────────────────────────────────────┘
+                                             │
+                                             ▼
+                             [Serving App: streamlit-dev]
 ```
 
 ---
 
-## Why Use a Dedicated Jenkins Docker Agent?
+## Step-by-Step Setup Guide (DevOps Journey Method)
 
-1. **Clean Slate Execution**: Every build runs inside a brand new `python:3.11-slim` container isolated from your host system.
-2. **Serving App Protection**: Tests NEVER execute inside `streamlit-dev`. If a test fails, `streamlit-dev` remains online and completely unaffected.
-3. **No Controller Pollution**: No need to install Python, `pip`, or testing dependencies inside the Jenkins controller container.
-
----
-
-## Updated `Jenkinsfile` Declarative Syntax
-
-```groovy
-pipeline {
-    agent {
-        docker {
-            image 'python:3.11-slim'
-            args '-v /var/run/docker.sock:/var/run/docker.sock -v /tmp:/tmp'
-        }
-    }
-
-    stages {
-        stage('Checkout Code') {
-            steps {
-                echo 'Checking out code from Git...'
-                checkout scm
-            }
-        }
-
-        stage('Smoke & Regression Tests') {
-            steps {
-                echo 'Executing Python tests inside isolated Python Docker Agent...'
-                sh 'pip install --no-cache-dir -r requirements.txt'
-                sh 'python tests/test_app.py'
-            }
-        }
-
-        stage('Build Docker Image') {
-            steps {
-                echo 'Building updated application Docker image via host Docker engine...'
-                sh 'docker compose -f docker-compose.dev.yml build'
-            }
-        }
-
-        stage('Deploy / Hot Reload') {
-            steps {
-                echo 'Deploying updated containers locally...'
-                sh 'docker compose -f docker-compose.dev.yml up -d'
-            }
-        }
-    }
-
-    post {
-        success {
-            echo '🎉 CI/CD Pipeline succeeded! Application updated successfully.'
-        }
-        failure {
-            echo '❌ CI/CD Pipeline failed! Check logs above.'
-        }
-    }
-}
+### Step 1: Ensure Shared Docker Network Exists
+Create a shared Docker network if it doesn't already exist:
+```bash
+docker network create mlops-network
 ```
 
+### Step 2: Spin Up Jenkins Controller with Port 50000 Exposed
+Use `docker-compose.jenkins.yml`:
+```bash
+docker compose -f docker-compose.jenkins.yml up -d
+```
+*(Notice port `50000:50000` is exposed for TCP Inbound Agents).*
+
 ---
 
-## Required Jenkins Plugin
+### Step 3: Install Docker Cloud Plugin in Jenkins
+1. Open Jenkins at `http://localhost:8080`.
+2. Go to **Manage Jenkins** ➔ **Plugins** ➔ **Available Plugins**.
+3. Search for **Docker** (by *Docker Cloud Plugin / CloudBees*).
+4. Select it and click **Install without restart**.
 
-For `agent { docker { ... } }` to work natively in Jenkins:
-1. Go to **Manage Jenkins** ➔ **Plugins** ➔ **Available Plugins**.
-2. Search and install **Docker Pipeline** (and **Docker** plugin).
-3. Restart Jenkins if prompted.
+---
+
+### Step 4: Configure Jenkins TCP Agent Port
+1. Go to **Manage Jenkins** ➔ **Security**.
+2. Under **Agents**:
+   - Change from *Disabled* to **Fixed: 50000** (or **Random**).
+3. Click **Save**.
+
+---
+
+### Step 5: Configure the Docker Cloud & Agent Template
+1. Go to **Manage Jenkins** ➔ **Clouds** (or **Nodes and Clouds** ➔ **Clouds**).
+2. Click **Add a new cloud** ➔ Select **Docker**.
+3. Configure **Docker Cloud Details**:
+   - **Docker Cloud Name**: `docker-local`
+   - **Docker Host URI**: `unix:///var/run/docker.sock`
+   - Click **Test Connection** (verify it shows success/version).
+4. Configure **Docker Agent Template**:
+   - Click **Add Docker Template**.
+   - **Labels**: `docker-python-agent`
+   - **Enabled**: Checked
+   - **Name**: `python-build-agent`
+   - **Docker Image**: `jenkins/inbound-agent:alpine` (or your custom Python agent)
+   - **Instance Capacity**: `2`
+   - **Remote Filing Directory**: `/home/jenkins/agent`
+   - **Network**: `mlops-network`
+5. Click **Save**.
+
+---
+
+### Step 6: Trigger & Test
+When a git commit is pushed to `main`:
+1. Jenkins Controller detects the commit via Poll SCM.
+2. Jenkins uses the Docker Cloud plugin to launch an agent container labeled `docker-python-agent` on `mlops-network`.
+3. The agent connects to Jenkins Controller over TCP port 50000.
+4. The agent runs your build/test stages and automatically terminates!
