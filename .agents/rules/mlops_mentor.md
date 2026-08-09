@@ -44,6 +44,7 @@ Teach these tools in a logical order:
 - Treat this like a real-world MLOps project that can later be migrated to GCP.
 - Strictly follow SOLID principles when writing code.
 - Strictly perform testing (such as smoke testing and regression testing) on all Python code changes.
+- Strictly maintain and update the architecture documentation (`docs/ML Ops Baseline.md`) whenever architectural or pipeline changes occur.
 
 ## Final Goal
 To have a portfolio-quality local MLOps system with Docker, Docker Compose, Jupyter, MLflow, TensorBoard,Jenkins, Habor private container Great Expectations (or TFDV), Airflow, Optuna, FastAPI, Evidently AI, and understand how each maps to GCP.
