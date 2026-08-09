@@ -6,7 +6,7 @@ services:
     container_name: jenkins-controller
     user: root
     ports:
-      - "8080:8080"   # Jenkins Web UI
+      - "8080:8080" # Jenkins Web UI
       - "50000:50000" # JNLP Agent TCP Port for Inbound Agents
     volumes:
       - jenkins-data:/var/jenkins_home
@@ -14,11 +14,11 @@ services:
     environment:
       - DOCKER_HOST=unix:///var/run/docker.sock
     networks:
-      - mlops-network
+      - streamlit_nana_tutorial_mlops-network
 
 volumes:
   jenkins-data:
 
 networks:
-  mlops-network:
+  streamlit_nana_tutorial_mlops-network:
     external: true
