@@ -1,14 +1,16 @@
-version: '3.8'
-
 services:
   # Dedicated Docker Daemon Container (Docker-in-Docker / DinD)
-  # Eliminates /var/run/docker.sock macOS permission bugs permanently
+  # TLS-enabled daemon for production-grade agent-to-daemon security.
   dind:
     image: docker:dind
-    container_name: jenkins-dind
+    container_name: dind
+    hostname: dind
     privileged: true
     environment:
-      - DOCKER_TLS_CERTDIR=
+      - DOCKER_TLS_CERTDIR=/certs
+    volumes:
+      - dind-data:/var/lib/docker
+      - dind-certs-client:/certs/client
     networks:
       - mlops-network
 
@@ -18,17 +20,23 @@ services:
     container_name: jenkins
     user: root
     ports:
-      - "8080:8080"   # Jenkins Web UI
+      - "8081:8080"   # Jenkins Web UI
       - "50000:50000" # JNLP Agent TCP Port for Inbound Agents
     volumes:
-      - jenkins-data:/var/jenkins_home
+      - jenkins_home:/var/jenkins_home
+      - dind-certs-client:/certs/client:ro
     environment:
-      - DOCKER_HOST=tcp://dind:2375
+      - DOCKER_HOST=tcp://dind:2376
+      - DOCKER_TLS_VERIFY=1
+      - DOCKER_CERT_PATH=/certs/client
     networks:
       - mlops-network
 
 volumes:
-  jenkins-data:
+  jenkins_home:
+    external: true
+  dind-data:
+  dind-certs-client:
 
 networks:
   mlops-network:
