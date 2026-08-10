@@ -1,20 +1,7 @@
 services:
-  # Dedicated Docker Daemon Container (Docker-in-Docker / DinD)
-  # TLS-enabled daemon for production-grade agent-to-daemon security.
-  dind:
-    image: docker:dind
-    container_name: dind
-    hostname: dind
-    privileged: true
-    environment:
-      - DOCKER_TLS_CERTDIR=/certs
-    volumes:
-      - dind-data:/var/lib/docker
-      - dind-certs-client:/certs/client
-    networks:
-      - mlops-network
-
   # Jenkins Controller Container
+  # Mounts the host Docker socket so the Docker Cloud plugin can launch
+  # ephemeral agent containers on the host daemon (DevOps Journey style).
   jenkins:
     image: jenkins/jenkins:lts-jdk21
     container_name: jenkins
@@ -24,19 +11,13 @@ services:
       - "50000:50000" # JNLP Agent TCP Port for Inbound Agents
     volumes:
       - jenkins_home:/var/jenkins_home
-      - dind-certs-client:/certs/client:ro
-    environment:
-      - DOCKER_HOST=tcp://dind:2376
-      - DOCKER_TLS_VERIFY=1
-      - DOCKER_CERT_PATH=/certs/client
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - mlops-network
 
 volumes:
   jenkins_home:
     external: true
-  dind-data:
-  dind-certs-client:
 
 networks:
   mlops-network:

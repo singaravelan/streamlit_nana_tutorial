@@ -11,16 +11,6 @@ pipeline {
         label 'docker-python-agent'
     }
 
-    options {
-        disableConcurrentBuilds()
-        timeout(time: 45, unit: 'MINUTES')
-    }
-
-    environment {
-        REGISTRY_HOST = 'localhost:8082'
-        IMAGE_NAME = 'mlops-lab/streamlit-app:latest'
-    }
-
     stages {
         stage('Checkout Code') {
             steps {
@@ -45,23 +35,6 @@ pipeline {
             }
         }
 
-        stage('Validate Docker Daemon Security') {
-            steps {
-                echo 'Validating secure Docker daemon configuration (TLS required)...'
-                sh '''#!/bin/sh
-set -eu
-[ -n "${DOCKER_HOST:-}" ] || { echo "DOCKER_HOST is required"; exit 1; }
-[ "${DOCKER_TLS_VERIFY:-}" = "1" ] || { echo "DOCKER_TLS_VERIFY must be 1"; exit 1; }
-[ -n "${DOCKER_CERT_PATH:-}" ] || { echo "DOCKER_CERT_PATH is required"; exit 1; }
-[ -f "${DOCKER_CERT_PATH}/ca.pem" ] || { echo "Missing ${DOCKER_CERT_PATH}/ca.pem"; exit 1; }
-[ -f "${DOCKER_CERT_PATH}/cert.pem" ] || { echo "Missing ${DOCKER_CERT_PATH}/cert.pem"; exit 1; }
-[ -f "${DOCKER_CERT_PATH}/key.pem" ] || { echo "Missing ${DOCKER_CERT_PATH}/key.pem"; exit 1; }
-echo "$DOCKER_HOST" | grep -q ':2376' || { echo "DOCKER_HOST must use TLS port 2376"; exit 1; }
-docker version >/dev/null
-'''
-            }
-        }
-
         stage('Build Docker Image') {
             steps {
                 echo 'Building updated application Docker image...'
@@ -71,16 +44,10 @@ docker version >/dev/null
 
         stage('Push Image to Harbor Registry') {
             steps {
-                echo 'Logging into Harbor and pushing image...'
-                withCredentials([usernamePassword(credentialsId: 'harbor-admin', usernameVariable: 'HARBOR_USER', passwordVariable: 'HARBOR_PASS')]) {
-                    sh '''#!/bin/sh
-set -eu
-echo "$HARBOR_PASS" | docker login "$REGISTRY_HOST" -u "$HARBOR_USER" --password-stdin
-docker tag streamlit_nana_tutorial-streamlit-app:latest "$REGISTRY_HOST/$IMAGE_NAME"
-docker push "$REGISTRY_HOST/$IMAGE_NAME"
-docker logout "$REGISTRY_HOST"
-'''
-                }
+                echo 'Logging into Harbor & Pushing image to localhost:8082/mlops-lab/streamlit-app:latest...'
+                sh 'docker login localhost:8082 -u admin -p Harbor12345'
+                sh 'docker tag streamlit_nana_tutorial-streamlit-app:latest localhost:8082/mlops-lab/streamlit-app:latest'
+                sh 'docker push localhost:8082/mlops-lab/streamlit-app:latest'
             }
         }
 
