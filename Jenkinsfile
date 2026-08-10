@@ -11,6 +11,10 @@ pipeline {
         label 'docker-python-agent'
     }
 
+    environment {
+        DOCKER_HOST = 'tcp://dind:2375'
+    }
+
     stages {
         stage('Checkout Code') {
             steps {
