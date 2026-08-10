@@ -11,10 +11,6 @@ pipeline {
         label 'docker-python-agent'
     }
 
-    environment {
-        DOCKER_HOST = 'tcp://dind:2375'
-    }
-
     stages {
         stage('Checkout Code') {
             steps {
@@ -42,30 +38,30 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo 'Building updated application Docker image...'
-                sh 'docker compose -p streamlit_nana_tutorial -f docker-compose.dev.yml build'
+                sh 'DOCKER_HOST=tcp://$(ip route | awk \'/default/ {print $3}\'):2375 docker compose -p streamlit_nana_tutorial -f docker-compose.dev.yml build'
             }
         }
 
         stage('Push Image to Harbor Registry') {
             steps {
                 echo 'Logging into Harbor & Pushing image to localhost:8082/mlops-lab/streamlit-app:latest...'
-                sh 'docker login localhost:8082 -u admin -p Harbor12345'
-                sh 'docker tag streamlit_nana_tutorial-streamlit-app:latest localhost:8082/mlops-lab/streamlit-app:latest'
-                sh 'docker push localhost:8082/mlops-lab/streamlit-app:latest'
+                sh 'DOCKER_HOST=tcp://$(ip route | awk \'/default/ {print $3}\'):2375 docker login localhost:8082 -u admin -p Harbor12345'
+                sh 'DOCKER_HOST=tcp://$(ip route | awk \'/default/ {print $3}\'):2375 docker tag streamlit_nana_tutorial-streamlit-app:latest localhost:8082/mlops-lab/streamlit-app:latest'
+                sh 'DOCKER_HOST=tcp://$(ip route | awk \'/default/ {print $3}\'):2375 docker push localhost:8082/mlops-lab/streamlit-app:latest'
             }
         }
 
         stage('Deploy Development App') {
             steps {
                 echo 'Hot-reloading local Development Environment (Port 8501)...'
-                sh 'docker compose -p streamlit_nana_tutorial -f docker-compose.dev.yml up -d'
+                sh 'DOCKER_HOST=tcp://$(ip route | awk \'/default/ {print $3}\'):2375 docker compose -p streamlit_nana_tutorial -f docker-compose.dev.yml up -d'
             }
         }
 
         stage('Deploy Production App') {
             steps {
                 echo 'Deploying Production App from Harbor Registry (Port 8502)...'
-                sh 'docker compose -p streamlit_prod -f production_env/docker-compose.prod.yml up -d'
+                sh 'DOCKER_HOST=tcp://$(ip route | awk \'/default/ {print $3}\'):2375 docker compose -p streamlit_prod -f production_env/docker-compose.prod.yml up -d'
             }
         }
     }
